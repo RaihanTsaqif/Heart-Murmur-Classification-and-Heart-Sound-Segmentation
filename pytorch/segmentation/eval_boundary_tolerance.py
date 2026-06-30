@@ -29,6 +29,9 @@ SEED = 0
 
 
 def main():
+    if not ev.CIR:
+        raise SystemExit("Set $CIRCOR_DIR to the CirCor 1.0.3 dataset root "
+                         "(PhysioNet download; not bundled in this repo).")
     n_sample = int(sys.argv[1]) if len(sys.argv) > 1 else 100
     model = ev.load_segmenter()
     wavs = sorted(glob.glob(f"{ev.CIR}/*.wav"))

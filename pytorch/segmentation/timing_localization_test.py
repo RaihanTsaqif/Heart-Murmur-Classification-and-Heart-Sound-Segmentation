@@ -29,8 +29,25 @@ from hss.transforms import FSST
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-CKPT = sorted(glob.glob("lightning_logs/version_1/checkpoints/*.ckpt"))[-1]
-CIR = "/mnt/c/Projects/Heart Sound AI Classifier/heart_sound/the-circor-digiscope-phonocardiogram-dataset-1.0.3"
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir, os.pardir))
+
+
+def _seg_ckpt():
+    """$SEG_CKPT, else a local training checkpoint, else this repo's shipped weights."""
+    env = os.environ.get("SEG_CKPT")
+    if env:
+        return env
+    local = sorted(glob.glob("lightning_logs/version_1/checkpoints/*.ckpt"))
+    if local:
+        return local[-1]
+    return os.path.join(_REPO_ROOT, "models", "segmenter_finetuned_circor.pth")
+
+
+CKPT = _seg_ckpt()
+# CirCor dataset root (the 'the-circor-digiscope-...-1.0.3' folder). Set $CIRCOR_DIR;
+# PhysioNet download, not bundled here. Empty when unset so import never fails.
+CIR = os.environ.get("CIRCOR_DIR", "")
 FS_SEG = 1000
 FRAME = 2000          # 2 s windows (matches training sequence length)
 MIN_TAIL = 256        # drop trailing window shorter than this
@@ -105,6 +122,9 @@ def process_recording(model, wav_path: str):
 
 
 def main():
+    if not CIR:
+        raise SystemExit("Set $CIRCOR_DIR to the CirCor 1.0.3 dataset root "
+                         "(PhysioNet download; not bundled in this repo).")
     limit = int(sys.argv[1]) if len(sys.argv) > 1 else None
     model = load_model()
 

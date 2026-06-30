@@ -2,17 +2,40 @@
 
 Input  : log-mel feature  (batch, 384, frames)   384 = 3 channels x 128 mel-bins
 Output : logits           (batch, 2)              index 0 = Present, 1 = Absent
-Run from the repo root (so `model` imports):  python export_murmur_onnx.py
+
+Usage (runs from any CWD; config/weights are resolved relative to THIS file):
+  # `model` comes from the upstream murmur repo (SiyuLou); pass a clone of it.
+  python pytorch/murmur/export_murmur_onnx.py --murmur-repo /path/to/AutomaticHeartSoundClassification
 """
+import argparse
 import json
 import os
+import sys
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import model.model as module_arch
+# Paths are anchored to THIS file, so the script runs from any CWD. ---------- #
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir, os.pardir))  # has configs/ models/ onnx/
+
+module_arch = None  # bound from the upstream murmur repo in _load_upstream()
+
+
+def _load_upstream(murmur_repo):
+    """Add the upstream murmur repo to sys.path and import its `model` package."""
+    global module_arch
+    murmur_repo = os.path.abspath(murmur_repo)
+    if not os.path.isdir(os.path.join(murmur_repo, "model")):
+        raise SystemExit(
+            f"murmur repo not found at: {murmur_repo}\n"
+            "Clone SiyuLou/AutomaticHeartSoundClassification and pass it with "
+            "--murmur-repo PATH (or set $MURMUR_REPO).")
+    sys.path.insert(0, murmur_repo)
+    import model.model as _ma
+    module_arch = _ma
 
 
 class ExportCRNN(nn.Module):
@@ -35,16 +58,25 @@ class ExportCRNN(nn.Module):
         x = x.squeeze(-2)
         return c.bilstm(x)
 
-CFG = "config/config_crnn.json"
-WEIGHTS = ("saved/training with circor murmur using authors architecture and "
-           "oversampling/best_model.pth")
-_BASE = ("/mnt/c/Projects/Heart Sound AI Classifier/model converted using ONNX"
-         if os.path.isdir("/mnt/c") else
-         r"C:\Projects\Heart Sound AI Classifier\model converted using ONNX")
-OUT = os.path.join(_BASE, "murmur_crnn_circor.onnx")
+CFG = os.path.join(_REPO_ROOT, "configs", "config_crnn.json")
+WEIGHTS = os.path.join(_REPO_ROOT, "models", "murmur_crnn_circor.pth")
+DEFAULT_OUT = os.path.join(_REPO_ROOT, "onnx", "murmur_crnn_circor.onnx")
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--murmur-repo", default=os.environ.get("MURMUR_REPO"),
+                    help="clone of SiyuLou/AutomaticHeartSoundClassification (provides "
+                         "the `model` package). Defaults to $MURMUR_REPO.")
+    ap.add_argument("--out", default=DEFAULT_OUT, help="output .onnx path")
+    args = ap.parse_args()
+    if not args.murmur_repo:
+        raise SystemExit("Need --murmur-repo PATH (clone of "
+                         "SiyuLou/AutomaticHeartSoundClassification) or set $MURMUR_REPO.")
+    _load_upstream(args.murmur_repo)
+    OUT = args.out
+    os.makedirs(os.path.dirname(os.path.abspath(OUT)), exist_ok=True)
+
     arch = json.load(open(CFG))["arch"]
     net = getattr(module_arch, arch["type"])(**arch["args"])
     ckpt = torch.load(WEIGHTS, weights_only=False, map_location="cpu")

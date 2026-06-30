@@ -38,26 +38,42 @@ trained weights are loaded from this repository's `models/` folder.
 
 ### `segmentation/`
 
-These still mirror the original segmentation research workflow. Run them from
-inside the upstream `heart-sounds-segmentation` repo unless the script says
-otherwise.
+Research / eval scripts. They import the upstream segmenter's `hss` package (run
+in its WSL pixi env, which provides the Linux-only FSST transform) and read the
+**CirCor dataset** from `$CIRCOR_DIR` (PhysioNet download; not bundled). The
+segmenter checkpoint defaults to this repo's
+`models/segmenter_finetuned_circor.pth` (override with `$SEG_CKPT`). Example:
+
+```bash
+CIRCOR_DIR=/path/to/the-circor-...-1.0.3 \
+  pixi run python pytorch/segmentation/eval_segmenter_on_circor.py
+```
 
 - `timing_localization_test.py` - systolic/diastolic timing test on CirCor.
 - `eval_segmenter_on_circor.py` - frame-level segmentation eval vs CirCor expert
   `.tsv` labels.
 - `eval_boundary_tolerance.py` - boundary-tolerance diagnostic for segmentation.
 - `finetune_segmenter_on_circor.py` - fine-tune the segmenter on CirCor.
-- `export_segmenter_onnx.py` - export the segmenter emission network to ONNX.
+- `export_segmenter_onnx.py` - export the segmenter emission network to ONNX
+  (writes to `onnx/` by default).
 - `plot_timing.py`, `plot_progress.py` - figures.
 
 ### `murmur/`
 
-These still mirror the original murmur-model workflow. Run them from inside the
-upstream `AutomaticHeartSoundClassification` repo unless the script says
-otherwise.
+Run these from anywhere; the murmur config/weights are resolved relative to this
+repo (`configs/`, `models/`). They import `model`/`utils` from the upstream murmur
+repo, so pass a clone of it with `--murmur-repo` (or set `$MURMUR_REPO`, or drop
+the clone next to this repo as `../AutomaticHeartSoundClassification`).
 
-- `export_murmur_onnx.py` - export the CirCor murmur model to ONNX.
-- `predict_new_audio.py` - run new audio through the CirCor-trained murmur model.
+- `predict_new_audio.py` - run new audio through the CirCor murmur model:
+
+  ```bash
+  python pytorch/murmur/predict_new_audio.py \
+    --murmur-repo ../AutomaticHeartSoundClassification recording.wav
+  ```
+
+- `export_murmur_onnx.py` - re-export the CirCor murmur model to ONNX
+  (`--murmur-repo ...`; writes to `onnx/` by default; needs the `onnx` package).
 
 ## Feature extraction note
 

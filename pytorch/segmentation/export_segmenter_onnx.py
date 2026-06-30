@@ -7,8 +7,8 @@ that does NOT export to ONNX, so we:
   - save the CRF transition tables to .npz so Viterbi can be run in Python/C++
     on top of the ONNX emissions (or use plain argmax for a CRF-free decode).
 
-Run in the WSL pixi env from the upstream segmentation repo root:
-  pixi run python /mnt/c/Projects/.../pytorch/segmentation/export_segmenter_onnx.py
+Run in the WSL pixi env (needs the upstream `hss` package on PYTHONPATH):
+  pixi run python pytorch/segmentation/export_segmenter_onnx.py
 """
 import argparse
 import glob
@@ -19,12 +19,11 @@ import torch
 
 from hss.model.lit_model_crf import LitModelCRF
 
-DEFAULT_RELEASE = (
-    "/mnt/c/Projects/Heart Sound AI Classifier/"
-    "Heart-Murmur-Classification-and-Heart-Sound-Segmentation"
-)
-DEFAULT_CKPT = f"{DEFAULT_RELEASE}/models/segmenter_finetuned_circor.pth"
-DEFAULT_OUTDIR = f"{DEFAULT_RELEASE}/onnx"
+# Defaults resolved relative to THIS file -> this repo's models/ and onnx/.
+DEFAULT_RELEASE = os.path.abspath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir))
+DEFAULT_CKPT = os.path.join(DEFAULT_RELEASE, "models", "segmenter_finetuned_circor.pth")
+DEFAULT_OUTDIR = os.path.join(DEFAULT_RELEASE, "onnx")
 
 
 def default_base_ckpt():

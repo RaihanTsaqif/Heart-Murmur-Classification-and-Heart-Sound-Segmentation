@@ -25,8 +25,10 @@ python onnx/heart_sound_pipeline_onnx.py path/to/recording.wav
 ## PyTorch version
 
 The scripts in `pytorch/` reproduce training/evaluation/fine-tuning and the ONNX
-export. They **import the two upstream model repositories** (see below), so to run
-them you must clone those repos and run from within them. See `pytorch/README.md`.
+export. They **import the two upstream model repositories** for the model class
+definitions, so clone those and point the scripts at them (e.g. `--murmur-repo`,
+`--seg-repo`, or `$MURMUR_REPO`). You run the scripts from this repo, not from
+inside the upstream clones. See `pytorch/README.md`.
 
 ## Models
 

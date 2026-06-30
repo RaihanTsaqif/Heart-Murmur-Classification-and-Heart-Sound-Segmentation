@@ -9,24 +9,51 @@ Per file we slide 5 s windows (50% overlap) over the whole recording and average
 the softmax across windows -> one probability per class (more robust than a single
 center crop for arbitrary-length files). Files shorter than 5 s are wrap-padded.
 
-Usage (run from the repo root so `model`/`utils` import correctly):
-    python predict_new_audio.py path\to\a.wav path\to\b.wav
-    python predict_new_audio.py path\to\folder_of_wavs
-    python predict_new_audio.py --window center a.wav   # single center crop instead
+Usage (works from any directory; config/weights are resolved relative to THIS file):
+    # model/ + utils/ come from the upstream murmur repo (SiyuLou). Point to a
+    # clone of it with --murmur-repo, or drop that clone next to this repo as
+    # ../AutomaticHeartSoundClassification, or set $MURMUR_REPO.
+    python pytorch/murmur/predict_new_audio.py path\to\a.wav path\to\b.wav
+    python pytorch/murmur/predict_new_audio.py path\to\folder_of_wavs
+    python pytorch/murmur/predict_new_audio.py --window center a.wav   # single center crop
+    python pytorch/murmur/predict_new_audio.py --murmur-repo D:\AutomaticHeartSoundClassification a.wav
 """
 import argparse
 import glob
 import json
 import os
+import sys
 
 import librosa
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-import model.model as module_arch
-from utils.util import read_audio
-from utils.audio_feature_extractor import LogMelExtractor, standard_normal_variate
+# Paths are anchored to THIS file, so the script runs from any CWD. ---------- #
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir, os.pardir))  # has configs/ models/
+
+# `model` and `utils` live in the upstream murmur repo (not vendored here);
+# they're imported in _load_upstream() once we know where that clone is.
+module_arch = read_audio = LogMelExtractor = standard_normal_variate = None
+
+
+def _load_upstream(murmur_repo):
+    """Add the upstream murmur repo to sys.path and bind model/utils to globals."""
+    global module_arch, read_audio, LogMelExtractor, standard_normal_variate
+    murmur_repo = os.path.abspath(murmur_repo)
+    if not os.path.isdir(os.path.join(murmur_repo, "model")):
+        raise SystemExit(
+            f"murmur repo not found at: {murmur_repo}\n"
+            "Clone SiyuLou/AutomaticHeartSoundClassification and pass it with "
+            "--murmur-repo PATH (or set $MURMUR_REPO).")
+    sys.path.insert(0, murmur_repo)
+    import model.model as _ma
+    from utils.util import read_audio as _ra
+    from utils.audio_feature_extractor import (LogMelExtractor as _lme,
+                                               standard_normal_variate as _snv)
+    module_arch, read_audio = _ma, _ra
+    LogMelExtractor, standard_normal_variate = _lme, _snv
 
 # --- fixed preprocessing constants (must match training) ------------------- #
 SR = 2000                                   # resample target == training rate
@@ -35,11 +62,12 @@ HOP_MS = 15
 CYCLE_LEN = int(DURATION * 1000 / HOP_MS)   # 333 frames per 5 s window
 
 # --- model: (label, arch-config, weights, class names idx0,idx1) ------------ #
+# config + weights ship in THIS repo (configs/ and models/), resolved via _REPO_ROOT.
 MODELS = [
     {
         "label": "CirCor murmur CRNN (Present/Absent)",
-        "config": "config/config_crnn.json",  # this run has no config.json of its own
-        "weights": "saved/training with circor murmur using authors architecture and oversampling/best_model.pth",
+        "config": os.path.join(_REPO_ROOT, "configs", "config_crnn.json"),
+        "weights": os.path.join(_REPO_ROOT, "models", "murmur_crnn_circor.pth"),
         "classes": ["Present", "Absent"],     # index 0 = positive (murmur present)
     },
 ]
@@ -104,13 +132,32 @@ def collect_paths(args_paths):
     return paths
 
 
+def _default_murmur_repo():
+    """Best-effort guess: $MURMUR_REPO, else a sibling clone next to this repo."""
+    env = os.environ.get("MURMUR_REPO")
+    if env:
+        return env
+    sibling = os.path.join(os.path.dirname(_REPO_ROOT), "AutomaticHeartSoundClassification")
+    return sibling if os.path.isdir(sibling) else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("paths", nargs="+", help="wav file(s) or folder(s)")
     ap.add_argument("--window", choices=["slide", "center"], default="slide",
                     help="'slide' = avg over 50%%-overlap 5 s windows (default); "
                          "'center' = single center 5 s crop")
+    ap.add_argument("--murmur-repo", default=_default_murmur_repo(),
+                    help="path to a clone of SiyuLou/AutomaticHeartSoundClassification "
+                         "(provides model/ + utils/). Defaults to $MURMUR_REPO or a "
+                         "sibling 'AutomaticHeartSoundClassification' folder.")
     args = ap.parse_args()
+
+    if not args.murmur_repo:
+        raise SystemExit(
+            "Could not locate the upstream murmur repo. Pass --murmur-repo PATH "
+            "(clone of SiyuLou/AutomaticHeartSoundClassification) or set $MURMUR_REPO.")
+    _load_upstream(args.murmur_repo)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}   |   window mode: {args.window}\n")

@@ -6,7 +6,8 @@ CirCor .tsv: rows of (start_sec, end_sec, label) with label 1=S1, 2=Systole,
 3=S2, 4=Diastole, 0=unannotated. Segmenter outputs 0=S1,1=Sys,2=S2,3=Dia, so
 ground-truth label k maps to k-1; label 0 regions are excluded from scoring.
 
-Usage (WSL pixi):  pixi run python eval_segmenter_on_circor.py [N_sample]
+Usage (WSL pixi):  CIRCOR_DIR=/path/to/the-circor-...-1.0.3 \
+                   pixi run python eval_segmenter_on_circor.py [N_sample]
 """
 import glob
 import json
@@ -26,9 +27,26 @@ import torch
 from hss.model.lit_model_crf import LitModelCRF
 from hss.transforms import FSST
 
-CIR = ("/mnt/c/Projects/Heart Sound AI Classifier/heart_sound/"
-       "the-circor-digiscope-phonocardiogram-dataset-1.0.3/training_data")
-SEG_CKPT = sorted(glob.glob("lightning_logs/version_1/checkpoints/*.ckpt"))[-1]
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir, os.pardir))
+
+
+# CirCor training_data dir. Set $CIRCOR_DIR to the dataset root (the
+# 'the-circor-digiscope-phonocardiogram-dataset-1.0.3' folder; PhysioNet download,
+# not bundled here). Empty when unset so importing this module never fails.
+def _seg_ckpt():
+    """$SEG_CKPT, else a local training checkpoint, else this repo's shipped weights."""
+    env = os.environ.get("SEG_CKPT")
+    if env:
+        return env
+    local = sorted(glob.glob("lightning_logs/version_1/checkpoints/*.ckpt"))
+    if local:
+        return local[-1]
+    return os.path.join(_REPO_ROOT, "models", "segmenter_finetuned_circor.pth")
+
+
+CIR = os.path.join(os.environ["CIRCOR_DIR"], "training_data") if os.environ.get("CIRCOR_DIR") else ""
+SEG_CKPT = _seg_ckpt()
 OUT = "circor_segmentation_eval"
 FS, FRAME, MIN_TAIL = 1000, 2000, 256
 NAMES = ["S1", "Systole", "S2", "Diastole"]
@@ -75,6 +93,9 @@ def gt_from_tsv(tsv, n):
 
 
 def main():
+    if not CIR:
+        raise SystemExit("Set $CIRCOR_DIR to the CirCor 1.0.3 dataset root "
+                         "(PhysioNet download; not bundled in this repo).")
     n_sample = int(sys.argv[1]) if len(sys.argv) > 1 else 300
     os.makedirs(OUT, exist_ok=True)
     model = load_segmenter()

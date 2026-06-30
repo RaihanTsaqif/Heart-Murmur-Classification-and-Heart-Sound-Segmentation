@@ -158,6 +158,9 @@ def cm_metrics(cm):
 
 
 def main():
+    if not ev.CIR:
+        raise SystemExit("Set $CIRCOR_DIR to the CirCor 1.0.3 dataset root "
+                         "(PhysioNet download; not bundled in this repo).")
     a = sys.argv[1:]
     n_train = int(a[0]) if len(a) > 0 else 300
     n_test = int(a[1]) if len(a) > 1 else 120
