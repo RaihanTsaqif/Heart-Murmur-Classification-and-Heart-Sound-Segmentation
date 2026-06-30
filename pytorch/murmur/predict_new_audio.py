@@ -35,12 +35,15 @@ _REPO_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir, os.pardir))  # has c
 
 # `model` and `utils` live in the upstream murmur repo (not vendored here);
 # they're imported in _load_upstream() once we know where that clone is.
-module_arch = read_audio = LogMelExtractor = standard_normal_variate = None
+# NOTE: we deliberately do NOT use upstream's LogMelExtractor -- its positional
+# librosa call breaks on librosa>=0.10. _log_mel() below computes the identical
+# feature with the keyword API, so this works against any upstream clone.
+module_arch = read_audio = standard_normal_variate = None
 
 
 def _load_upstream(murmur_repo):
     """Add the upstream murmur repo to sys.path and bind model/utils to globals."""
-    global module_arch, read_audio, LogMelExtractor, standard_normal_variate
+    global module_arch, read_audio, standard_normal_variate
     murmur_repo = os.path.abspath(murmur_repo)
     if not os.path.isdir(os.path.join(murmur_repo, "model")):
         raise SystemExit(
@@ -50,10 +53,8 @@ def _load_upstream(murmur_repo):
     sys.path.insert(0, murmur_repo)
     import model.model as _ma
     from utils.util import read_audio as _ra
-    from utils.audio_feature_extractor import (LogMelExtractor as _lme,
-                                               standard_normal_variate as _snv)
-    module_arch, read_audio = _ma, _ra
-    LogMelExtractor, standard_normal_variate = _lme, _snv
+    from utils.audio_feature_extractor import standard_normal_variate as _snv
+    module_arch, read_audio, standard_normal_variate = _ma, _ra, _snv
 
 # --- fixed preprocessing constants (must match training) ------------------- #
 SR = 2000                                   # resample target == training rate
@@ -82,12 +83,22 @@ def load_model(cfg_path, weights_path, device):
     return net.to(device).eval()
 
 
+def _log_mel(audio, fs):
+    """Version-safe log-mel, identical to upstream LogMelExtractor(log=True,
+    snv=False): 128 mels, 15 ms hop, 25 ms window. Uses the librosa>=0.10 keyword
+    API so it works regardless of the upstream clone's librosa compatibility."""
+    mel = librosa.feature.melspectrogram(
+        y=np.asarray(audio, dtype=float), sr=fs, n_mels=128,
+        hop_length=int(fs * HOP_MS / 1000), win_length=int(fs * 25 / 1000))
+    return np.log(mel + 1e-8)
+
+
 def feature_for_file(path):
     """resample 4k/anything -> 2k, bandpass, log-mel, z-score, +delta+delta2.
     Returns (384, T) float32 -- identical to the dataset's online preprocessing
     *before* cropping."""
     audio, fs = read_audio(path, target_fs=SR, filter=True)
-    feat = LogMelExtractor(audio, fs, log=True, snv=False)   # (128, T)
+    feat = _log_mel(audio, fs)                               # (128, T)
     feat = standard_normal_variate(feat)
     d = librosa.feature.delta(feat)
     d2 = librosa.feature.delta(d)

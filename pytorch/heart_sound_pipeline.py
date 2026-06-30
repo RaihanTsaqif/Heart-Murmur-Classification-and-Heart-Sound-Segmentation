@@ -63,7 +63,9 @@ AUDIO_EXTS = ("*.wav", "*.flac", "*.ogg")
 def load_murmur_model():
     import model.model as module_arch
     from utils.util import read_audio
-    from utils.audio_feature_extractor import LogMelExtractor, standard_normal_variate
+    # NOTE: not using upstream's LogMelExtractor -- its positional librosa call
+    # breaks on librosa>=0.10. murmur_feature() computes the identical log-mel.
+    from utils.audio_feature_extractor import standard_normal_variate
 
     arch = json.load(open(MURMUR_CFG))["arch"]
     net = getattr(module_arch, arch["type"])(**arch["args"])
@@ -71,13 +73,18 @@ def load_murmur_model():
     state = ckpt["state_dict"] if "state_dict" in ckpt else ckpt
     net.load_state_dict(state)
     net.to(DEVICE).eval()
-    return net, read_audio, LogMelExtractor, standard_normal_variate
+    return net, read_audio, standard_normal_variate
 
 
-def murmur_feature(path, read_audio, LogMelExtractor, snv_fn):
+def murmur_feature(path, read_audio, snv_fn):
     import librosa
     audio, fs = read_audio(path, target_fs=SR_MURMUR, filter=True)
-    feat = LogMelExtractor(audio, fs, log=True, snv=False)        # (128, T)
+    # version-safe log-mel (== upstream LogMelExtractor log=True, snv=False):
+    # 128 mels, 15 ms hop, 25 ms window, log(mel+1e-8)
+    mel = librosa.feature.melspectrogram(
+        y=np.asarray(audio, dtype=float), sr=fs, n_mels=128,
+        hop_length=int(fs * HOP_MS / 1000), win_length=int(fs * 25 / 1000))
+    feat = np.log(mel + 1e-8)                                     # (128, T)
     feat = snv_fn(feat)
     d = librosa.feature.delta(feat)
     d2 = librosa.feature.delta(d)
@@ -288,7 +295,7 @@ def main():
           f"{' (GPU)' if args.fsst_gpu and args.fsst_backend == 'ssqueezepy' else ''}\n")
 
     t_load = time.perf_counter()
-    net, read_audio, LogMel, snv = load_murmur_model()
+    net, read_audio, snv = load_murmur_model()
     seg_model = load_segmenter()
     fsst = make_fsst(args.fsst_backend, args.fsst_gpu)
     print(f"(models + FSST backend loaded in {time.perf_counter() - t_load:.1f}s)\n")
@@ -305,7 +312,7 @@ def main():
         name = os.path.basename(path)
 
         t0 = time.perf_counter()
-        feat = murmur_feature(path, read_audio, LogMel, snv)
+        feat = murmur_feature(path, read_audio, snv)
         secs = feat.shape[1] * HOP_MS / 1000
         p_present, p_absent = detect_murmur(net, feat)
         t_detect = time.perf_counter() - t0
