@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 RaihanTsaqif
+Copyright (c) 2026 Muhammad Raihan Tsaqif
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---------------------------------------------------------------------------
+
+This project incorporates components from third-party projects that are
+licensed under the MIT License (the heart-murmur CRNN by SiyuLou, and the
+heart-sound segmentation LSTM-CRF by Alvaro Gaona). Those components and their
+original copyright notices are attributed in THIRD_PARTY_NOTICES.md, which forms
+part of this distribution.
