@@ -14,14 +14,14 @@ For each audio file (or every audio file in a folder) it runs:
            reports Systolic vs Diastolic energy share as percentages and
            names the murmur timing.
 
-MUST be run inside the WSL pixi env (needs `ssq` for FSST + `librosa` for mel):
-    pixi run python heart_sound_pipeline.py <file_or_folder> [more ...]
-    pixi run python heart_sound_pipeline.py --csv out.csv /path/to/folder
+Run from this repository, pointing to the two cloned upstream repos:
+    python pytorch/heart_sound_pipeline.py audio.wav --seg-repo /path/to/heart-sounds-segmentation --murmur-repo /path/to/AutomaticHeartSoundClassification
 """
 import argparse
 import glob
 import json
 import os
+import re
 import sys
 import time
 
@@ -32,30 +32,24 @@ import torch
 import torch.nn.functional as F
 
 
-# ----------------------------------------------------------------------------- #
-# Repo locations (WSL paths). Run this from the upstream segmentation repo so
-# `hss.*` and `lightning_logs/...` resolve from the current working directory.
-# The murmur repo is added explicitly for `model`/`utils`/`base` imports.
-# ----------------------------------------------------------------------------- #
-REPO_SEG = os.getcwd()
-REPO_MURMUR = ("/mnt/c/Projects/Heart Sound AI Classifier/Past CNN Models/#2/"
-               "AutomaticHeartSoundClassification-main")
-sys.path.insert(0, REPO_SEG)
-sys.path.insert(0, REPO_MURMUR)
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+
+REPO_SEG = None
+REPO_MURMUR = None
+MURMUR_CFG = os.path.join(ROOT, "configs", "config_crnn.json")
+MURMUR_WEIGHTS = os.path.join(ROOT, "models", "murmur_crnn_circor.pth")
+SEG_WEIGHTS = os.path.join(ROOT, "models", "segmenter_finetuned_circor.pth")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --- murmur model -------------------------------------------------------------#
-MURMUR_CFG = f"{REPO_MURMUR}/config/config_crnn.json"
-MURMUR_WEIGHTS = (f"{REPO_MURMUR}/saved/training with circor murmur using authors "
-                  f"architecture and oversampling/best_model.pth")
 MURMUR_CLASSES = ["Present", "Absent"]       # index 0 = murmur present
 SR_MURMUR = 2000
 HOP_MS = 15
 CYCLE_LEN = int(5 * 1000 / HOP_MS)           # 333 frames per 5 s window
 
 # --- segmenter ----------------------------------------------------------------#
-SEG_CKPT = sorted(glob.glob(f"{REPO_SEG}/lightning_logs/version_1/checkpoints/*.ckpt"))[-1]
 FS_SEG = 1000
 FRAME = 2000
 MIN_TAIL = 256
@@ -115,7 +109,7 @@ def detect_murmur(net, feat):
 def load_segmenter():
     from hss.model.lit_model_crf import LitModelCRF
     model = LitModelCRF(input_size=44, batch_size=1, device=DEVICE)
-    ckpt = torch.load(SEG_CKPT, map_location=DEVICE, weights_only=False)
+    ckpt = torch.load(SEG_WEIGHTS, map_location=DEVICE, weights_only=False)
     sd = {k: v for k, v in ckpt["state_dict"].items()
           if not (k.endswith("h0") or k.endswith("c0"))}
     model.load_state_dict(sd, strict=False)
@@ -218,11 +212,33 @@ def analyze_timing(model, fsst, path):
 def to_wsl_path(p):
     """Translate a Windows path (C:\\foo\\bar) to WSL form (/mnt/c/foo/bar) when
     running under WSL, so either path style works from the command line."""
-    import re
     m = re.match(r"^([A-Za-z]):[\\/](.*)", p)
     if m and os.path.isdir("/mnt"):
         return f"/mnt/{m.group(1).lower()}/{m.group(2).replace(chr(92), '/')}"
     return p
+
+
+def require_path(path, kind):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"{kind} not found: {path}")
+    return path
+
+
+def configure_repos(args):
+    global REPO_SEG, REPO_MURMUR, MURMUR_CFG, MURMUR_WEIGHTS, SEG_WEIGHTS
+
+    REPO_SEG = require_path(to_wsl_path(args.seg_repo), "segmentation repo")
+    REPO_MURMUR = require_path(to_wsl_path(args.murmur_repo), "murmur repo")
+    MURMUR_CFG = require_path(to_wsl_path(args.murmur_config), "murmur config")
+    MURMUR_WEIGHTS = require_path(to_wsl_path(args.murmur_weights), "murmur weights")
+    SEG_WEIGHTS = require_path(to_wsl_path(args.segmenter_weights), "segmenter weights")
+
+    require_path(os.path.join(REPO_SEG, "hss"), "segmentation repo hss package")
+    require_path(os.path.join(REPO_MURMUR, "model"), "murmur repo model package")
+    require_path(os.path.join(REPO_MURMUR, "utils"), "murmur repo utils package")
+
+    sys.path.insert(0, REPO_SEG)
+    sys.path.insert(0, REPO_MURMUR)
 
 
 def collect_paths(args_paths):
@@ -240,6 +256,16 @@ def collect_paths(args_paths):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("paths", nargs="+", help="audio file(s) or folder(s)")
+    ap.add_argument("--seg-repo", required=True,
+                    help="path to cloned alvgaona/heart-sounds-segmentation repo")
+    ap.add_argument("--murmur-repo", required=True,
+                    help="path to cloned SiyuLou/AutomaticHeartSoundClassification repo")
+    ap.add_argument("--murmur-config", default=MURMUR_CFG,
+                    help="CRNN architecture config (default: this repo's configs/config_crnn.json)")
+    ap.add_argument("--murmur-weights", default=MURMUR_WEIGHTS,
+                    help="murmur CRNN weights (default: this repo's models/murmur_crnn_circor.pth)")
+    ap.add_argument("--segmenter-weights", default=SEG_WEIGHTS,
+                    help="segmenter weights (default: this repo's models/segmenter_finetuned_circor.pth)")
     ap.add_argument("--csv", help="optional path to write a results table")
     ap.add_argument("--threshold", type=float, default=0.5,
                     help="P[Present] cutoff to call a murmur (default 0.5)")
@@ -251,9 +277,13 @@ def main():
                     help="run ssqueezepy FSST on GPU (only affects --fsst-backend ssqueezepy)")
     args = ap.parse_args()
 
+    configure_repos(args)
+
     print(f"Device: {DEVICE}")
-    print(f"Murmur model : {os.path.basename(os.path.dirname(MURMUR_WEIGHTS))}")
-    print(f"Segmenter    : {os.path.relpath(SEG_CKPT, REPO_SEG)}")
+    print(f"Murmur repo  : {REPO_MURMUR}")
+    print(f"Segment repo : {REPO_SEG}")
+    print(f"Murmur model : {MURMUR_WEIGHTS}")
+    print(f"Segmenter    : {SEG_WEIGHTS}")
     print(f"FSST backend : {args.fsst_backend}"
           f"{' (GPU)' if args.fsst_gpu and args.fsst_backend == 'ssqueezepy' else ''}\n")
 
