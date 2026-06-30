@@ -1,0 +1,17 @@
+# PyTorch path (also requires cloning the two upstream repos; see pytorch/README.md)
+torch
+torchvision
+torchaudio
+lightning            # PyTorch Lightning (segmenter training)
+numpy
+scipy
+pandas
+scikit-learn
+soundfile
+librosa
+matplotlib
+h5py
+tqdm
+# FSST feature transform (one of):
+#   ssq          -> upstream segmentation repo's package (Linux-only, via prefix.dev)
+#   ssqueezepy   -> cross-platform alternative used by the ONNX pipeline

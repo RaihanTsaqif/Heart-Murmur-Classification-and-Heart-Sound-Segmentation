@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+.pixi/
+env/
+
+# Datasets (download separately — see THIRD_PARTY_NOTICES.md)
+*.wav
+*.flac
+*.tsv
+data/
+resources/
+training_data/
+*physionet*/
+*circor*/
+
+# Training/run artifacts
+lightning_logs/
+runs/
+*.log
+mel_*.h5
+*_mel_*.npz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NOTE: model weights (models/*.pth, *.ckpt, onnx/*.onnx, onnx/*.npz) are tracked
+# on purpose. Consider Git LFS for them if the repo grows.

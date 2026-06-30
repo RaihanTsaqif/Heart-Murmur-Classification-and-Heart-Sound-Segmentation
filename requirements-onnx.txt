@@ -1,0 +1,8 @@
+# ONNX runtime path (no PyTorch needed)
+onnxruntime          # or onnxruntime-gpu for CUDA
+numpy
+scipy
+soundfile
+librosa
+ssqueezepy
+matplotlib
