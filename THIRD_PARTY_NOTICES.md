@@ -51,8 +51,8 @@ SOFTWARE.
 
 - **Used for:** the S1/Systole/S2/Diastole segmentation architecture (BiLSTM +
   CRF), the FSST feature transform, and the training/evaluation framework.
-- **Files in this repo derived from it:** `models/segmenter_fold1.ckpt`,
-  `models/segmenter_finetuned_circor.pth`, `onnx/segmenter_emissions.onnx`,
+- **Files in this repo derived from it:** `models/segmenter_finetuned_circor.pth`,
+  `onnx/segmenter_emissions.onnx`,
   `onnx/segmenter_crf_transitions.npz`, and the scripts in `pytorch/segmentation/`
   (which import that project's model code).
 - **Original project:** alvgaona / heart-sounds-segmentation

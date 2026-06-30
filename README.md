@@ -33,7 +33,6 @@ them you must clone those repos and run from within them. See `pytorch/README.md
 | File | Model |
 |---|---|
 | `models/murmur_crnn_circor.pth` | murmur CRNN, trained on CirCor |
-| `models/segmenter_fold1.ckpt` | segmenter, trained on DavidSpringer HSS |
 | `models/segmenter_finetuned_circor.pth` | above, fine-tuned on CirCor (best on CirCor) |
 | `onnx/murmur_crnn_circor.onnx` | murmur model, ONNX |
 | `onnx/segmenter_emissions.onnx` + `segmenter_crf_transitions.npz` | CirCor-finetuned segmenter, ONNX emission network (+ CRF tables for Viterbi) |

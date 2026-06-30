@@ -15,7 +15,6 @@ included; see notices).
 | File | Architecture | Trained on | Notes |
 |---|---|---|---|
 | `murmur_crnn_circor.pth` | CRNN (SiyuLou) | CirCor murmur Present/Absent | main murmur model; ~94% MAcc on held-out CirCor test |
-| `segmenter_fold1.ckpt` | BiLSTM-CRF (Gaona) | DavidSpringer HSS | base segmenter (~91% val) |
 | `segmenter_finetuned_circor.pth` | BiLSTM-CRF (Gaona) | DavidSpringer → fine-tuned on CirCor `.tsv` | best on CirCor (~87% overall / ~86% balanced, held-out patients) |
 
 ## Performance
